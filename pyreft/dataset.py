@@ -242,10 +242,8 @@ class ReftDataset(Dataset):
 
         # subspaces
         if "subspaces" in data_item:
+            # one entry per intervention, matching intervention_locations
             num_interventions = kwargs["num_interventions"]
-            share_weights = kwargs["share_weights"] if "share_weights" in kwargs else False
-            if share_weights:
-                num_interventions = num_interventions // 2
             # we now assume each task has a constant subspaces
             _subspaces = [data_item["subspaces"]] * num_interventions
             result["subspaces"] = _subspaces
@@ -320,10 +318,8 @@ class ReftRawDataset(Dataset):
             result["intervention_locations"][-1] = (torch.IntTensor(result["intervention_locations"][-1]) + 1).tolist()
             result["attention_mask"].append((result["input_ids"][-1] != tokenizer.pad_token_id).int())
             if "subspaces" in data_item:
+                # one entry per intervention, matching intervention_locations
                 num_interventions = kwargs["num_interventions"]
-                share_weights = kwargs["share_weights"] if "share_weights" in kwargs else False
-                if share_weights:
-                    num_interventions = num_interventions // 2
                 # we now assume each task has a constant subspaces
                 _subspaces = [data_item["subspaces"]] * num_interventions
                 result["subspaces"].append(_subspaces)
