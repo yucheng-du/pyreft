@@ -143,7 +143,7 @@ class ReftTrainer(Trainer):
         if cf_outputs is None:
             output = base_outputs # in case of lora only training
 
-        return (output, output) if return_outputs else output.loss
+        return (output.loss, output) if return_outputs else output.loss
 
 class ReftTrainerForCausalLM(ReftTrainer):
     def get_train_dataloader(self) -> DataLoader:
