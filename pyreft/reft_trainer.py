@@ -204,9 +204,9 @@ class ReftTrainerForSequenceClassification(ReftTrainer):
         if problem_type == "regression":
             loss_fct = MSELoss()
             if self.model.model.num_labels == 1:
-                loss = loss_fct(logits.squeeze(), labels.squeeze().to(torch.bfloat16))
+                loss = loss_fct(logits.squeeze(), labels.squeeze().to(logits.dtype))
             else:
-                loss = loss_fct(logits, labels.to(torch.bfloat16))
+                loss = loss_fct(logits, labels.to(logits.dtype))
         elif problem_type == "single_label_classification":
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.model.model.num_labels), labels.view(-1))
