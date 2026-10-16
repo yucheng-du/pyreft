@@ -189,3 +189,11 @@ python train.py -task math \
 You only need to add `--use_lora` flag to enable this. Feel free to look at the code for our implementation.
 
 
+
+## Offline tests
+
+The regression tests for evaluation intervention locations (left padding, beams) use a tiny in-memory tokenizer and need no model weights, datasets or network. From the repository root:
+
+```bash
+HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 python -m pytest examples/loreft/tests
+```

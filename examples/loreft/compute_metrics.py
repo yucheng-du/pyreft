@@ -104,6 +104,21 @@ def make_data_collator(tokenizer, model) -> ReftDataCollator:
     return ReftDataCollator(data_collator=data_collator_fn)
 
 
+@dataclass
+class LeftPaddingRecorder(object):
+    """Record how many pad tokens a left-padding collator prepends to each example."""
+
+    data_collator: DataCollator
+
+    def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
+        lengths = torch.tensor([len(instance["input_ids"]) for instance in instances])
+        batch_inputs = self.data_collator(instances)
+        # the dataset's sink pad is part of each example's length, so this is
+        # only the padding newly added by the collator, [batch_size]
+        batch_inputs["left_padding"] = batch_inputs["input_ids"].shape[-1] - lengths
+        return batch_inputs
+
+
 def make_dataloader(dataset: Dataset, batch_size: int, collate_fn: DataCollatorForSeq2Seq, shuffle: bool) -> DataLoader:
     return DataLoader(dataset, shuffle=shuffle, batch_size=batch_size, collate_fn=collate_fn)
 
@@ -132,6 +147,8 @@ def compute_metrics(
 
     data_collator = data_collator if data_collator is not None else \
         make_data_collator(tokenizer, intervenable.model)
+    if task != "glue":
+        data_collator = LeftPaddingRecorder(data_collator=data_collator)
     eval_dataloader = make_dataloader(eval_dataset, batch_size, data_collator, shuffle=False)
     correct_count = 0
     total_count = 0
@@ -176,16 +193,11 @@ def compute_metrics(
                 all_labels += labels.tolist()
             
             else:
-                # get left padding count, [batch_size], and add to locations
+                # shift each example's locations by its own left padding count
                 if intervention_locations is not None:
-                    left_padding = (inputs["input_ids"] == tokenizer.bos_token_id).nonzero(as_tuple=True)[1]
-                    if left_padding.numel() > 0:
-                        left_padding = left_padding.reshape(1, -1, 1).to(device) # [1, batch_size, 1]
-                        intervention_locations += left_padding
-                        intervention_locations -= 1 # offset for the sink padding
-                    else:
-                        print("Warning: No BOS token found, skipping left padding adjustment.")
-    
+                    left_padding = inputs["left_padding"].reshape(1, -1, 1) # [1, batch_size, 1]
+                    intervention_locations = intervention_locations + left_padding
+
                     # repeat each batch by num_beams times in intervention locations
                     # -> [layers, batch_size * num_beams, positions]
                     intervention_locations = intervention_locations.repeat_interleave(num_beams, dim=1).tolist()
