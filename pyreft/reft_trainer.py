@@ -224,7 +224,7 @@ class ReftTrainerForSequenceClassification(ReftTrainer):
         # ensure everything is in eval mode
         self.model.model.eval()
         for k,v in  self.model.interventions.items():
-            _ = v[0].eval()
+            _ = v.eval()
         
         batch_size = self.args.eval_batch_size
         data_collator = self.data_collator
