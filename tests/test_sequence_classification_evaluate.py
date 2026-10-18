@@ -100,6 +100,13 @@ def set_component_mode(model, training):
         intervention.train(training)
 
 
+def assert_component_mode(model, base_training, intervention_training):
+    assert all(child.training == base_training for child in model.model.modules())
+    for intervention in model.interventions.values():
+        assert all(child.training == intervention_training
+                   for child in intervention.modules())
+
+
 def manual_eval_forward(trainer):
     set_component_mode(trainer.model, False)
     predictions, labels, batch_sizes = [], [], []
@@ -194,6 +201,7 @@ def test_public_evaluate_uses_intervention_modules(tmp_path, dropout):
             metrics = trainer.evaluate(ignore_keys=None)
 
             assert metrics == expected_metrics
+            assert_component_mode(model, True, True)
             assert type(metrics["eval_accuracy"]) is float
             assert type(metrics["eval_count"]) is int
             assert len(recorder.predictions) == round_index + 1
@@ -212,3 +220,47 @@ def test_public_evaluate_uses_intervention_modules(tmp_path, dropout):
     finally:
         for handle in handles:
             handle.remove()
+
+
+@pytest.mark.parametrize(
+    "base_training, intervention_training",
+    [(True, True), (False, False), (False, True)],
+    ids=["enter-train", "enter-eval", "enter-mixed"],
+)
+def test_evaluate_restores_entry_modes(tmp_path, base_training, intervention_training):
+    trainer, _ = make_trainer(tmp_path, dropout=0.5)
+    model = trainer.model
+    model.model.train(base_training)
+    for intervention in model.interventions.values():
+        intervention.train(intervention_training)
+
+    observed = []
+
+    def observe_forward(module, args):
+        observed.append(module.training or model.model.training)
+
+    handles = [module.register_forward_pre_hook(observe_forward)
+               for module in model.interventions.values()]
+    try:
+        trainer.evaluate(ignore_keys=None)
+    finally:
+        for handle in handles:
+            handle.remove()
+
+    # Evaluation itself runs in eval mode, then hands back the caller's modes so
+    # in-training evaluation does not leave intervention dropout disabled.
+    assert observed and not any(observed)
+    assert_component_mode(model, base_training, intervention_training)
+
+
+def test_evaluate_restores_modes_when_metrics_fail(tmp_path):
+    trainer, _ = make_trainer(tmp_path, dropout=0.5)
+    set_component_mode(trainer.model, True)
+
+    def failing_metrics(prediction):
+        raise RuntimeError("metrics failed")
+
+    trainer.compute_metrics = failing_metrics
+    with pytest.raises(RuntimeError, match="metrics failed"):
+        trainer.evaluate(ignore_keys=None)
+    assert_component_mode(trainer.model, True, True)
